@@ -1,14 +1,17 @@
+
+
+Copiar
+
 import { useState, useRef, useEffect } from 'react'
 import Head from 'next/head'
 import { SERVICES, DEMO_USERS, DEMO_ORDERS, DEMO_OFFERS } from '../lib/data'
-
-// Fix demo orders service reference
+ 
 const initialOrders = DEMO_ORDERS.map(o => ({ ...o, service: SERVICES[0] }))
-
+ 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
-
+ 
 function parseBubble(content) {
   const parts = content.split(/(```json[\s\S]*?```)/g)
   return parts.map((part, i) => {
@@ -40,8 +43,7 @@ function parseBubble(content) {
     return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />
   })
 }
-
-// ─── NAV ────────────────────────────────────────────────
+ 
 function Nav({ user, screen, setScreen, logout }) {
   if (!user) return null
   const links = user.type === 'client'
@@ -69,8 +71,7 @@ function Nav({ user, screen, setScreen, logout }) {
     </nav>
   )
 }
-
-// ─── AUTH ────────────────────────────────────────────────
+ 
 function AuthScreen({ users, currentUser, loginAs, setScreen }) {
   return (
     <div className="page">
@@ -105,8 +106,7 @@ function AuthScreen({ users, currentUser, loginAs, setScreen }) {
     </div>
   )
 }
-
-// ─── REGISTER ────────────────────────────────────────────
+ 
 function RegisterScreen({ setScreen, onRegister }) {
   const [form, setForm] = useState({ name: '', shop: '', wa: '' })
   const upd = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
@@ -139,8 +139,7 @@ function RegisterScreen({ setScreen, onRegister }) {
     </div>
   )
 }
-
-// ─── SERVICES ────────────────────────────────────────────
+ 
 function ServicesScreen({ onSelect }) {
   return (
     <div className="page">
@@ -161,30 +160,58 @@ function ServicesScreen({ onSelect }) {
     </div>
   )
 }
-
-// ─── CHAT ────────────────────────────────────────────────
+ 
+// ─── CHAT WITH IMAGE UPLOAD ───────────────────────────────
 function ChatScreen({ service, onPublish }) {
   const greetings = {
-    '3d': '¡Hola! Soy tu asistente para **Impresión 3D**. Voy a ayudarte a crear un brief técnico completo.\n\n¿Qué tipo de pieza o producto necesitas imprimir? Descríbeme brevemente.',
-    'cnc': '¡Hola! Soy tu asistente para **CNC Mecanizado**. Recopilaré toda la información técnica.\n\n¿Qué pieza necesitas mecanizar y cuál es su función?',
-    'laser': '¡Hola! Soy tu asistente para **Corte y Grabado Láser**.\n\n¿Qué necesitas cortar o grabar, y en qué material?',
-    'injection': '¡Hola! Soy tu asistente para **Inyección Plástica**.\n\n¿Qué pieza plástica necesitas y cuántas unidades aproximadamente?',
+    '3d': '¡Hola! Soy tu asistente para **Impresión 3D**. Puedes escribirme o subir una imagen/foto de la pieza que necesitas.\n\n¿Qué tipo de pieza o producto necesitas imprimir?',
+    'cnc': '¡Hola! Soy tu asistente para **CNC Mecanizado**. Puedes describirme la pieza o subir una imagen/plano.\n\n¿Qué pieza necesitas mecanizar?',
+    'laser': '¡Hola! Soy tu asistente para **Corte y Grabado Láser**. Puedes subir tu diseño o imagen de referencia.\n\n¿Qué necesitas cortar o grabar?',
+    'injection': '¡Hola! Soy tu asistente para **Inyección Plástica**. Puedes subir una imagen de referencia o plano.\n\n¿Qué pieza plástica necesitas producir?',
   }
   const [msgs, setMsgs] = useState([{ role: 'assistant', content: greetings[service.id] || '¡Hola!' }])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState(null)
+  const [pendingImages, setPendingImages] = useState([]) // base64 previews
   const endRef = useRef(null)
-
+  const fileRef = useRef(null)
+ 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, loading])
-
+ 
+  function handleFileChange(e) {
+    const files = Array.from(e.target.files)
+    files.forEach(file => {
+      if (!file.type.startsWith('image/')) return
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        setPendingImages(prev => [...prev, ev.target.result])
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
+  }
+ 
+  function removeImage(idx) {
+    setPendingImages(prev => prev.filter((_, i) => i !== idx))
+  }
+ 
   async function send() {
     const txt = input.trim()
-    if (!txt || loading) return
-    const newMsgs = [...msgs, { role: 'user', content: txt }]
+    if ((!txt && pendingImages.length === 0) || loading) return
+ 
+    const userMsg = {
+      role: 'user',
+      content: txt || '(imagen adjunta)',
+      images: pendingImages.length > 0 ? [...pendingImages] : undefined,
+    }
+ 
+    const newMsgs = [...msgs, userMsg]
     setMsgs(newMsgs)
     setInput('')
+    setPendingImages([])
     setLoading(true)
+ 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -202,7 +229,7 @@ function ChatScreen({ service, onPublish }) {
     }
     setLoading(false)
   }
-
+ 
   const steps = [
     { label: 'Tipo de servicio', done: true },
     { label: 'Descripción del proyecto', done: msgs.length > 2 },
@@ -210,7 +237,7 @@ function ChatScreen({ service, onPublish }) {
     { label: 'Brief completo', done: !!draft },
   ]
   const doneCnt = steps.filter(s => s.done).length
-
+ 
   return (
     <div className="page" style={{ paddingTop: '20px' }}>
       <div className="chat-layout">
@@ -221,10 +248,23 @@ function ChatScreen({ service, onPublish }) {
             </span>
             <span style={{ fontSize: '14px', fontWeight: 600 }}>Asistente de Pedidos</span>
           </div>
+ 
           <div className="chat-messages">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
-                <div className="msg-bubble">{m.role === 'user' ? m.content : parseBubble(m.content)}</div>
+                <div className="msg-bubble">
+                  {/* Show images in the bubble if user sent them */}
+                  {m.images && m.images.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: m.content && m.content !== '(imagen adjunta)' ? '8px' : '0' }}>
+                      {m.images.map((img, idx) => (
+                        <img key={idx} src={img} alt="adjunto" style={{ maxWidth: '180px', maxHeight: '140px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #3A2F00' }} />
+                      ))}
+                    </div>
+                  )}
+                  {m.content && m.content !== '(imagen adjunta)' && (
+                    m.role === 'user' ? m.content : parseBubble(m.content)
+                  )}
+                </div>
               </div>
             ))}
             {loading && (
@@ -238,17 +278,54 @@ function ChatScreen({ service, onPublish }) {
             )}
             <div ref={endRef} />
           </div>
+ 
+          {/* Image previews above input */}
+          {pendingImages.length > 0 && (
+            <div style={{ padding: '8px 14px', borderTop: '1px solid #1E1E1E', display: 'flex', gap: '8px', flexWrap: 'wrap', background: '#0D0D0D' }}>
+              {pendingImages.map((img, idx) => (
+                <div key={idx} style={{ position: 'relative' }}>
+                  <img src={img} alt="preview" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #3A2F00' }} />
+                  <button
+                    onClick={() => removeImage(idx)}
+                    style={{ position: 'absolute', top: '-6px', right: '-6px', width: '18px', height: '18px', background: '#EF4444', border: 'none', borderRadius: '50%', color: '#fff', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+ 
           <div className="chat-input-area">
+            {/* Hidden file input */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            {/* Image upload button */}
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="btn btn-ghost btn-sm"
+              title="Adjuntar imagen"
+              style={{ padding: '8px', fontSize: '18px', flexShrink: 0, border: '1px solid #333', borderRadius: '7px' }}>
+              📎
+            </button>
             <textarea
-              placeholder="Escribe tu respuesta..."
+              placeholder="Escribe tu respuesta o adjunta una imagen..."
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
               rows={1}
             />
-            <button className="btn btn-primary" onClick={send} disabled={!input.trim() || loading}>Enviar</button>
+            <button className="btn btn-primary" onClick={send} disabled={(!input.trim() && pendingImages.length === 0) || loading}>
+              Enviar
+            </button>
           </div>
         </div>
+ 
         <div className="sidebar">
           <div className="progress-box">
             <h4>Progreso del Brief</h4>
@@ -261,6 +338,13 @@ function ChatScreen({ service, onPublish }) {
               ))}
             </div>
           </div>
+ 
+          {/* Image upload hint */}
+          <div style={{ background: '#111', border: '1px solid #1E1E1E', borderRadius: '9px', padding: '14px', fontSize: '12px', color: '#666', lineHeight: 1.6 }}>
+            <div style={{ color: '#D97706', marginBottom: '6px' }}>📎 Puedes adjuntar imágenes</div>
+            Sube fotos de la pieza, planos, diseños o referencias. El asistente las analizará automáticamente.
+          </div>
+ 
           {draft ? (
             <div className="brief-box">
               <h4>Brief Técnico</h4>
@@ -280,7 +364,7 @@ function ChatScreen({ service, onPublish }) {
           ) : (
             <div className="hint-box">
               <div style={{ marginBottom: '6px', color: '#888' }}>💡 Cómo funciona</div>
-              Responde las preguntas para crear el brief técnico. Los talleres recibirán tu pedido y enviarán ofertas con precio, plazo y ubicación.
+              Responde las preguntas o sube una imagen. Una vez completo el brief, los talleres podrán cotizarte con precisión.
             </div>
           )}
         </div>
@@ -288,8 +372,7 @@ function ChatScreen({ service, onPublish }) {
     </div>
   )
 }
-
-// ─── MY ORDERS ────────────────────────────────────────────
+ 
 function MyOrdersScreen({ orders, offers, user, onAccept }) {
   const [expanded, setExpanded] = useState(null)
   const mine = orders.filter(o => o.clientId === user.id)
@@ -382,19 +465,18 @@ function MyOrdersScreen({ orders, offers, user, onAccept }) {
     </div>
   )
 }
-
-// ─── WORKSHOP DASH ────────────────────────────────────────
+ 
 function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMarkPaid }) {
   const [tab, setTab] = useState('orders')
   const [expanded, setExpanded] = useState(null)
   const [showForm, setShowForm] = useState(null)
   const [form, setForm] = useState({ price: '', days: '', msg: '' })
   const upd = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
-
+ 
   const open = orders.filter(o => o.status === 'open')
   const myOff = offers.filter(o => o.workshopId === user.id)
   const myComm = commissions.filter(c => c.workshopId === user.id)
-
+ 
   return (
     <div className="page">
       <div className="page-header">
@@ -406,7 +488,7 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
         <button className={`tab ${tab === 'my-offers' ? 'active' : ''}`} onClick={() => setTab('my-offers')}>Mis Ofertas ({myOff.length})</button>
         <button className={`tab ${tab === 'commissions' ? 'active' : ''}`} onClick={() => setTab('commissions')}>Comisiones ({myComm.length})</button>
       </div>
-
+ 
       {tab === 'orders' && (
         open.length === 0 ? <div className="empty-state"><h3>Sin pedidos disponibles</h3></div> :
         <div className="order-list">
@@ -484,7 +566,7 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
           })}
         </div>
       )}
-
+ 
       {tab === 'my-offers' && (
         myOff.length === 0 ? <div className="empty-state"><h3>Sin ofertas enviadas</h3></div> :
         <div className="order-list">
@@ -515,34 +597,21 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
           })}
         </div>
       )}
-
+ 
       {tab === 'commissions' && <CommissionsView commissions={myComm} orders={orders} onMarkPaid={onMarkPaid} />}
     </div>
   )
 }
-
-// ─── COMMISSIONS ────────────────────────────────────────
+ 
 function CommissionsView({ commissions, orders, onMarkPaid }) {
   const pending = commissions.filter(c => !c.paid).reduce((s, c) => s + c.amount, 0)
   const paid = commissions.filter(c => c.paid).reduce((s, c) => s + c.amount, 0)
   return (
     <div>
       <div className="stats-row">
-        <div className="stat-card">
-          <div className="stat-label">Pendientes</div>
-          <div className="stat-value">S/ {pending.toFixed(2)}</div>
-          <div className="stat-sub">{commissions.filter(c => !c.paid).length} por pagar</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Pagadas</div>
-          <div className="stat-value" style={{ color: '#34D399' }}>S/ {paid.toFixed(2)}</div>
-          <div className="stat-sub">{commissions.filter(c => c.paid).length} completadas</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Total generado</div>
-          <div className="stat-value" style={{ color: '#60A5FA' }}>S/ {(pending + paid).toFixed(2)}</div>
-          <div className="stat-sub">{commissions.length} operaciones</div>
-        </div>
+        <div className="stat-card"><div className="stat-label">Pendientes</div><div className="stat-value">S/ {pending.toFixed(2)}</div><div className="stat-sub">{commissions.filter(c => !c.paid).length} por pagar</div></div>
+        <div className="stat-card"><div className="stat-label">Pagadas</div><div className="stat-value" style={{ color: '#34D399' }}>S/ {paid.toFixed(2)}</div><div className="stat-sub">{commissions.filter(c => c.paid).length} completadas</div></div>
+        <div className="stat-card"><div className="stat-label">Total generado</div><div className="stat-value" style={{ color: '#60A5FA' }}>S/ {(pending + paid).toFixed(2)}</div><div className="stat-sub">{commissions.length} operaciones</div></div>
       </div>
       {commissions.length === 0 ? (
         <div className="empty-state"><h3>Sin comisiones</h3><p>Se generan cuando un cliente acepta tu oferta.</p></div>
@@ -572,8 +641,7 @@ function CommissionsView({ commissions, orders, onMarkPaid }) {
     </div>
   )
 }
-
-// ─── APP ROOT ────────────────────────────────────────────
+ 
 export default function Home() {
   const [screen, setScreen] = useState('auth')
   const [user, setUser] = useState(null)
@@ -583,22 +651,21 @@ export default function Home() {
   const [commissions, setCommissions] = useState([])
   const [service, setService] = useState(null)
   const [toast, setToast] = useState(null)
-
+ 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000) }
-
   function loginAs(u) { setUser(u); setScreen(u.type === 'client' ? 'services' : 'workshop-dash') }
   function logout() { setUser(null); setScreen('auth') }
-
+ 
   function registerWorkshop(form) {
     const u = { id: `w-${Date.now()}`, type: 'workshop', name: form.name, workshopName: form.shop, whatsapp: form.wa, location: 'Lima, Perú' }
     setUsers(prev => [...prev, u]); loginAs(u); showToast('¡Taller registrado!')
   }
-
+ 
   function publishOrder(draft, svc) {
     const ord = { id: `ord-${Date.now()}`, clientId: user.id, clientName: user.name, service: svc, summary: draft, status: 'open', createdAt: new Date().toISOString() }
     setOrders(prev => [...prev, ord]); setScreen('my-orders'); showToast('¡Pedido publicado!')
   }
-
+ 
   function acceptOffer(off) {
     setOffers(prev => prev.map(o => o.id === off.id ? { ...o, status: 'accepted' } : o.orderId === off.orderId ? { ...o, status: 'rejected' } : o))
     setOrders(prev => prev.map(o => o.id === off.orderId ? { ...o, status: 'in-progress' } : o))
@@ -606,14 +673,14 @@ export default function Home() {
     setCommissions(prev => [...prev, comm])
     showToast(`¡Aceptada! Comisión: S/ ${(off.price * 0.05).toFixed(2)}`)
   }
-
+ 
   function submitOffer(orderId, form, workshopUser) {
     const off = { id: `off-${Date.now()}`, orderId, workshopId: workshopUser.id, workshopName: workshopUser.workshopName, workshopWhatsapp: workshopUser.whatsapp, location: workshopUser.location || 'Lima', price: parseFloat(form.price), deliveryDays: parseInt(form.days), message: form.msg, status: 'pending', createdAt: new Date().toISOString() }
     setOffers(prev => [...prev, off]); showToast('¡Oferta enviada!')
   }
-
+ 
   function markPaid(id) { setCommissions(prev => prev.map(c => c.id === id ? { ...c, paid: true } : c)); showToast('Comisión marcada como pagada.') }
-
+ 
   return (
     <>
       <Head>
@@ -621,7 +688,7 @@ export default function Home() {
         <meta name="description" content="Conectamos clientes con talleres de manufactura en Lima" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <Nav user={user} screen={screen} setScreen={(s) => setScreen(s)} logout={logout} />
+      <Nav user={user} screen={screen} setScreen={setScreen} logout={logout} />
       {screen === 'auth' && <AuthScreen users={users} currentUser={user} loginAs={loginAs} setScreen={setScreen} />}
       {screen === 'register-workshop' && <RegisterScreen setScreen={setScreen} onRegister={registerWorkshop} />}
       {screen === 'services' && <ServicesScreen onSelect={s => { setService(s); setScreen('chat') }} />}
