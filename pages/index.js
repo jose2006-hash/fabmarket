@@ -1,17 +1,13 @@
-
-
-Copiar
-
 import { useState, useRef, useEffect } from 'react'
 import Head from 'next/head'
 import { SERVICES, DEMO_USERS, DEMO_ORDERS, DEMO_OFFERS } from '../lib/data'
- 
+
 const initialOrders = DEMO_ORDERS.map(o => ({ ...o, service: SERVICES[0] }))
- 
+
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
- 
+
 function parseBubble(content) {
   const parts = content.split(/(```json[\s\S]*?```)/g)
   return parts.map((part, i) => {
@@ -43,7 +39,7 @@ function parseBubble(content) {
     return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />
   })
 }
- 
+
 function Nav({ user, screen, setScreen, logout }) {
   if (!user) return null
   const links = user.type === 'client'
@@ -71,7 +67,7 @@ function Nav({ user, screen, setScreen, logout }) {
     </nav>
   )
 }
- 
+
 function AuthScreen({ users, currentUser, loginAs, setScreen }) {
   return (
     <div className="page">
@@ -106,7 +102,7 @@ function AuthScreen({ users, currentUser, loginAs, setScreen }) {
     </div>
   )
 }
- 
+
 function RegisterScreen({ setScreen, onRegister }) {
   const [form, setForm] = useState({ name: '', shop: '', wa: '' })
   const upd = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
@@ -139,7 +135,7 @@ function RegisterScreen({ setScreen, onRegister }) {
     </div>
   )
 }
- 
+
 function ServicesScreen({ onSelect }) {
   return (
     <div className="page">
@@ -160,7 +156,7 @@ function ServicesScreen({ onSelect }) {
     </div>
   )
 }
- 
+
 // ─── CHAT WITH IMAGE UPLOAD ───────────────────────────────
 function ChatScreen({ service, onPublish }) {
   const greetings = {
@@ -176,9 +172,9 @@ function ChatScreen({ service, onPublish }) {
   const [pendingImages, setPendingImages] = useState([]) // base64 previews
   const endRef = useRef(null)
   const fileRef = useRef(null)
- 
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, loading])
- 
+
   function handleFileChange(e) {
     const files = Array.from(e.target.files)
     files.forEach(file => {
@@ -191,27 +187,27 @@ function ChatScreen({ service, onPublish }) {
     })
     e.target.value = ''
   }
- 
+
   function removeImage(idx) {
     setPendingImages(prev => prev.filter((_, i) => i !== idx))
   }
- 
+
   async function send() {
     const txt = input.trim()
     if ((!txt && pendingImages.length === 0) || loading) return
- 
+
     const userMsg = {
       role: 'user',
       content: txt || '(imagen adjunta)',
       images: pendingImages.length > 0 ? [...pendingImages] : undefined,
     }
- 
+
     const newMsgs = [...msgs, userMsg]
     setMsgs(newMsgs)
     setInput('')
     setPendingImages([])
     setLoading(true)
- 
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -229,7 +225,7 @@ function ChatScreen({ service, onPublish }) {
     }
     setLoading(false)
   }
- 
+
   const steps = [
     { label: 'Tipo de servicio', done: true },
     { label: 'Descripción del proyecto', done: msgs.length > 2 },
@@ -237,7 +233,7 @@ function ChatScreen({ service, onPublish }) {
     { label: 'Brief completo', done: !!draft },
   ]
   const doneCnt = steps.filter(s => s.done).length
- 
+
   return (
     <div className="page" style={{ paddingTop: '20px' }}>
       <div className="chat-layout">
@@ -248,7 +244,7 @@ function ChatScreen({ service, onPublish }) {
             </span>
             <span style={{ fontSize: '14px', fontWeight: 600 }}>Asistente de Pedidos</span>
           </div>
- 
+
           <div className="chat-messages">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
@@ -278,7 +274,7 @@ function ChatScreen({ service, onPublish }) {
             )}
             <div ref={endRef} />
           </div>
- 
+
           {/* Image previews above input */}
           {pendingImages.length > 0 && (
             <div style={{ padding: '8px 14px', borderTop: '1px solid #1E1E1E', display: 'flex', gap: '8px', flexWrap: 'wrap', background: '#0D0D0D' }}>
@@ -294,7 +290,7 @@ function ChatScreen({ service, onPublish }) {
               ))}
             </div>
           )}
- 
+
           <div className="chat-input-area">
             {/* Hidden file input */}
             <input
@@ -325,7 +321,7 @@ function ChatScreen({ service, onPublish }) {
             </button>
           </div>
         </div>
- 
+
         <div className="sidebar">
           <div className="progress-box">
             <h4>Progreso del Brief</h4>
@@ -338,13 +334,13 @@ function ChatScreen({ service, onPublish }) {
               ))}
             </div>
           </div>
- 
+
           {/* Image upload hint */}
           <div style={{ background: '#111', border: '1px solid #1E1E1E', borderRadius: '9px', padding: '14px', fontSize: '12px', color: '#666', lineHeight: 1.6 }}>
             <div style={{ color: '#D97706', marginBottom: '6px' }}>📎 Puedes adjuntar imágenes</div>
             Sube fotos de la pieza, planos, diseños o referencias. El asistente las analizará automáticamente.
           </div>
- 
+
           {draft ? (
             <div className="brief-box">
               <h4>Brief Técnico</h4>
@@ -372,7 +368,7 @@ function ChatScreen({ service, onPublish }) {
     </div>
   )
 }
- 
+
 function MyOrdersScreen({ orders, offers, user, onAccept }) {
   const [expanded, setExpanded] = useState(null)
   const mine = orders.filter(o => o.clientId === user.id)
@@ -465,18 +461,18 @@ function MyOrdersScreen({ orders, offers, user, onAccept }) {
     </div>
   )
 }
- 
+
 function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMarkPaid }) {
   const [tab, setTab] = useState('orders')
   const [expanded, setExpanded] = useState(null)
   const [showForm, setShowForm] = useState(null)
   const [form, setForm] = useState({ price: '', days: '', msg: '' })
   const upd = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
- 
+
   const open = orders.filter(o => o.status === 'open')
   const myOff = offers.filter(o => o.workshopId === user.id)
   const myComm = commissions.filter(c => c.workshopId === user.id)
- 
+
   return (
     <div className="page">
       <div className="page-header">
@@ -488,7 +484,7 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
         <button className={`tab ${tab === 'my-offers' ? 'active' : ''}`} onClick={() => setTab('my-offers')}>Mis Ofertas ({myOff.length})</button>
         <button className={`tab ${tab === 'commissions' ? 'active' : ''}`} onClick={() => setTab('commissions')}>Comisiones ({myComm.length})</button>
       </div>
- 
+
       {tab === 'orders' && (
         open.length === 0 ? <div className="empty-state"><h3>Sin pedidos disponibles</h3></div> :
         <div className="order-list">
@@ -566,7 +562,7 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
           })}
         </div>
       )}
- 
+
       {tab === 'my-offers' && (
         myOff.length === 0 ? <div className="empty-state"><h3>Sin ofertas enviadas</h3></div> :
         <div className="order-list">
@@ -597,12 +593,12 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
           })}
         </div>
       )}
- 
+
       {tab === 'commissions' && <CommissionsView commissions={myComm} orders={orders} onMarkPaid={onMarkPaid} />}
     </div>
   )
 }
- 
+
 function CommissionsView({ commissions, orders, onMarkPaid }) {
   const pending = commissions.filter(c => !c.paid).reduce((s, c) => s + c.amount, 0)
   const paid = commissions.filter(c => c.paid).reduce((s, c) => s + c.amount, 0)
@@ -641,7 +637,7 @@ function CommissionsView({ commissions, orders, onMarkPaid }) {
     </div>
   )
 }
- 
+
 export default function Home() {
   const [screen, setScreen] = useState('auth')
   const [user, setUser] = useState(null)
@@ -651,21 +647,21 @@ export default function Home() {
   const [commissions, setCommissions] = useState([])
   const [service, setService] = useState(null)
   const [toast, setToast] = useState(null)
- 
+
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000) }
   function loginAs(u) { setUser(u); setScreen(u.type === 'client' ? 'services' : 'workshop-dash') }
   function logout() { setUser(null); setScreen('auth') }
- 
+
   function registerWorkshop(form) {
     const u = { id: `w-${Date.now()}`, type: 'workshop', name: form.name, workshopName: form.shop, whatsapp: form.wa, location: 'Lima, Perú' }
     setUsers(prev => [...prev, u]); loginAs(u); showToast('¡Taller registrado!')
   }
- 
+
   function publishOrder(draft, svc) {
     const ord = { id: `ord-${Date.now()}`, clientId: user.id, clientName: user.name, service: svc, summary: draft, status: 'open', createdAt: new Date().toISOString() }
     setOrders(prev => [...prev, ord]); setScreen('my-orders'); showToast('¡Pedido publicado!')
   }
- 
+
   function acceptOffer(off) {
     setOffers(prev => prev.map(o => o.id === off.id ? { ...o, status: 'accepted' } : o.orderId === off.orderId ? { ...o, status: 'rejected' } : o))
     setOrders(prev => prev.map(o => o.id === off.orderId ? { ...o, status: 'in-progress' } : o))
@@ -673,14 +669,14 @@ export default function Home() {
     setCommissions(prev => [...prev, comm])
     showToast(`¡Aceptada! Comisión: S/ ${(off.price * 0.05).toFixed(2)}`)
   }
- 
+
   function submitOffer(orderId, form, workshopUser) {
     const off = { id: `off-${Date.now()}`, orderId, workshopId: workshopUser.id, workshopName: workshopUser.workshopName, workshopWhatsapp: workshopUser.whatsapp, location: workshopUser.location || 'Lima', price: parseFloat(form.price), deliveryDays: parseInt(form.days), message: form.msg, status: 'pending', createdAt: new Date().toISOString() }
     setOffers(prev => [...prev, off]); showToast('¡Oferta enviada!')
   }
- 
+
   function markPaid(id) { setCommissions(prev => prev.map(c => c.id === id ? { ...c, paid: true } : c)); showToast('Comisión marcada como pagada.') }
- 
+
   return (
     <>
       <Head>
