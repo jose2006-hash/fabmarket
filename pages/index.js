@@ -1,8 +1,22 @@
+// v3 - localStorage + imagen obligatoria
 import { useState, useRef, useEffect } from 'react'
 import Head from 'next/head'
 import { SERVICES, DEMO_USERS, DEMO_ORDERS, DEMO_OFFERS } from '../lib/data'
 
 const initialOrders = DEMO_ORDERS.map(o => ({ ...o, service: SERVICES[0] }))
+
+function loadState(key, fallback) {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const v = localStorage.getItem(key)
+    return v ? JSON.parse(v) : fallback
+  } catch { return fallback }
+}
+
+function saveState(key, value) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+}
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -157,11 +171,10 @@ function ServicesScreen({ onSelect }) {
   )
 }
 
-// ─── CHAT WITH IMAGE UPLOAD ───────────────────────────────
 function ChatScreen({ service, onPublish }) {
   const greetings = {
-    '3d': '¡Hola! Soy tu asistente para **Impresión 3D**. Puedes escribirme o subir una imagen/foto de la pieza que necesitas.\n\n¿Qué tipo de pieza o producto necesitas imprimir?',
-    'cnc': '¡Hola! Soy tu asistente para **CNC Mecanizado**. Puedes describirme la pieza o subir una imagen/plano.\n\n¿Qué pieza necesitas mecanizar?',
+    '3d': '¡Hola! Soy tu asistente para **Impresión 3D**. Puedes escribirme o subir una foto/imagen de la pieza.\n\n¿Qué tipo de pieza necesitas imprimir?',
+    'cnc': '¡Hola! Soy tu asistente para **CNC Mecanizado**. Puedes describirme la pieza o subir un plano/imagen.\n\n¿Qué pieza necesitas mecanizar?',
     'laser': '¡Hola! Soy tu asistente para **Corte y Grabado Láser**. Puedes subir tu diseño o imagen de referencia.\n\n¿Qué necesitas cortar o grabar?',
     'injection': '¡Hola! Soy tu asistente para **Inyección Plástica**. Puedes subir una imagen de referencia o plano.\n\n¿Qué pieza plástica necesitas producir?',
   }
@@ -169,7 +182,8 @@ function ChatScreen({ service, onPublish }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState(null)
-  const [pendingImages, setPendingImages] = useState([]) // base64 previews
+  const [pendingImages, setPendingImages] = useState([])
+  const [allImages, setAllImages] = useState([]) // todas las imágenes subidas en la sesión
   const endRef = useRef(null)
   const fileRef = useRef(null)
 
@@ -182,6 +196,7 @@ function ChatScreen({ service, onPublish }) {
       const reader = new FileReader()
       reader.onload = (ev) => {
         setPendingImages(prev => [...prev, ev.target.result])
+        setAllImages(prev => [...prev, ev.target.result])
       }
       reader.readAsDataURL(file)
     })
@@ -195,19 +210,16 @@ function ChatScreen({ service, onPublish }) {
   async function send() {
     const txt = input.trim()
     if ((!txt && pendingImages.length === 0) || loading) return
-
     const userMsg = {
       role: 'user',
       content: txt || '(imagen adjunta)',
       images: pendingImages.length > 0 ? [...pendingImages] : undefined,
     }
-
     const newMsgs = [...msgs, userMsg]
     setMsgs(newMsgs)
     setInput('')
     setPendingImages([])
     setLoading(true)
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -233,6 +245,7 @@ function ChatScreen({ service, onPublish }) {
     { label: 'Brief completo', done: !!draft },
   ]
   const doneCnt = steps.filter(s => s.done).length
+  const canPublish = !!draft && allImages.length > 0
 
   return (
     <div className="page" style={{ paddingTop: '20px' }}>
@@ -244,12 +257,10 @@ function ChatScreen({ service, onPublish }) {
             </span>
             <span style={{ fontSize: '14px', fontWeight: 600 }}>Asistente de Pedidos</span>
           </div>
-
           <div className="chat-messages">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.role === 'user' ? 'user' : 'assistant'}`}>
                 <div className="msg-bubble">
-                  {/* Show images in the bubble if user sent them */}
                   {m.images && m.images.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: m.content && m.content !== '(imagen adjunta)' ? '8px' : '0' }}>
                       {m.images.map((img, idx) => (
@@ -275,14 +286,12 @@ function ChatScreen({ service, onPublish }) {
             <div ref={endRef} />
           </div>
 
-          {/* Image previews above input */}
           {pendingImages.length > 0 && (
             <div style={{ padding: '8px 14px', borderTop: '1px solid #1E1E1E', display: 'flex', gap: '8px', flexWrap: 'wrap', background: '#0D0D0D' }}>
               {pendingImages.map((img, idx) => (
                 <div key={idx} style={{ position: 'relative' }}>
                   <img src={img} alt="preview" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #3A2F00' }} />
-                  <button
-                    onClick={() => removeImage(idx)}
+                  <button onClick={() => removeImage(idx)}
                     style={{ position: 'absolute', top: '-6px', right: '-6px', width: '18px', height: '18px', background: '#EF4444', border: 'none', borderRadius: '50%', color: '#fff', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     ✕
                   </button>
@@ -292,20 +301,8 @@ function ChatScreen({ service, onPublish }) {
           )}
 
           <div className="chat-input-area">
-            {/* Hidden file input */}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-            {/* Image upload button */}
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="btn btn-ghost btn-sm"
-              title="Adjuntar imagen"
+            <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleFileChange} />
+            <button onClick={() => fileRef.current?.click()} className="btn btn-ghost btn-sm" title="Adjuntar imagen"
               style={{ padding: '8px', fontSize: '18px', flexShrink: 0, border: '1px solid #333', borderRadius: '7px' }}>
               📎
             </button>
@@ -335,10 +332,16 @@ function ChatScreen({ service, onPublish }) {
             </div>
           </div>
 
-          {/* Image upload hint */}
-          <div style={{ background: '#111', border: '1px solid #1E1E1E', borderRadius: '9px', padding: '14px', fontSize: '12px', color: '#666', lineHeight: 1.6 }}>
-            <div style={{ color: '#D97706', marginBottom: '6px' }}>📎 Puedes adjuntar imágenes</div>
-            Sube fotos de la pieza, planos, diseños o referencias. El asistente las analizará automáticamente.
+          <div style={{ background: '#111', border: `1px solid ${allImages.length > 0 ? '#065F46' : '#1E1E1E'}`, borderRadius: '9px', padding: '14px', fontSize: '12px', color: '#666', lineHeight: 1.6, transition: 'border-color 0.3s' }}>
+            <div style={{ color: allImages.length > 0 ? '#34D399' : '#D97706', marginBottom: '6px' }}>
+              {allImages.length > 0 ? `✅ ${allImages.length} imagen(es) adjunta(s)` : '📎 Imagen requerida'}
+            </div>
+            {allImages.length > 0
+              ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {allImages.map((img, i) => <img key={i} src={img} alt="" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px' }} />)}
+                </div>
+              : 'Sube al menos una foto o imagen del pedido para poder publicarlo.'
+            }
           </div>
 
           {draft ? (
@@ -353,14 +356,21 @@ function ChatScreen({ service, onPublish }) {
                     <span className="brief-value">{String(v)}</span>
                   </div>
                 ))}
-              <button className="btn btn-primary" style={{ width: '100%', marginTop: '14px' }} onClick={() => onPublish(draft, service)}>
-                Publicar Pedido →
+              {!canPublish && (
+                <div style={{ fontSize: '11px', color: '#EF4444', background: '#1A0808', border: '1px solid #3A0808', borderRadius: '5px', padding: '8px', marginTop: '10px' }}>
+                  ⚠️ Debes subir al menos una imagen para publicar
+                </div>
+              )}
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '10px', opacity: canPublish ? 1 : 0.4 }}
+                onClick={() => canPublish && onPublish(draft, service, allImages)}
+                disabled={!canPublish}>
+                {canPublish ? 'Publicar Pedido →' : 'Sube una imagen primero'}
               </button>
             </div>
           ) : (
             <div className="hint-box">
               <div style={{ marginBottom: '6px', color: '#888' }}>💡 Cómo funciona</div>
-              Responde las preguntas o sube una imagen. Una vez completo el brief, los talleres podrán cotizarte con precisión.
+              Responde las preguntas y sube una imagen del pedido. Los talleres la verán al cotizar.
             </div>
           )}
         </div>
@@ -406,6 +416,17 @@ function MyOrdersScreen({ orders, offers, user, onAccept }) {
                 </div>
                 {exp && (
                   <div className="order-body">
+                    {/* Mostrar imágenes del pedido */}
+                    {ord.images && ord.images.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '8px' }}>Imágenes del pedido</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {ord.images.map((img, i) => (
+                            <img key={i} src={img} alt="" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #2A2A2A' }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {ord.summary?.descripcion_tecnica && <p style={{ fontSize: '13px', color: '#888', lineHeight: 1.6 }}>{ord.summary.descripcion_tecnica}</p>}
                     {ord.summary?.especificaciones && (
                       <div className="specs-grid">
@@ -506,6 +527,17 @@ function WorkshopDash({ orders, offers, commissions, user, onSubmitOffer, onMark
                 </div>
                 {exp && (
                   <div className="order-body">
+                    {/* Imágenes visibles para el taller */}
+                    {ord.images && ord.images.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '8px' }}>Imágenes del pedido</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
+                          {ord.images.map((img, i) => (
+                            <img key={i} src={img} alt="" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #2A2A2A' }} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {ord.summary?.descripcion_tecnica && <p style={{ fontSize: '13px', color: '#888', lineHeight: 1.6 }}>{ord.summary.descripcion_tecnica}</p>}
                     {ord.summary?.especificaciones && (
                       <div className="specs-grid">
@@ -641,12 +673,18 @@ function CommissionsView({ commissions, orders, onMarkPaid }) {
 export default function Home() {
   const [screen, setScreen] = useState('auth')
   const [user, setUser] = useState(null)
-  const [users, setUsers] = useState(DEMO_USERS)
-  const [orders, setOrders] = useState(initialOrders)
-  const [offers, setOffers] = useState(DEMO_OFFERS)
-  const [commissions, setCommissions] = useState([])
+  const [users, setUsers] = useState(() => loadState('fm_users', DEMO_USERS))
+  const [orders, setOrders] = useState(() => loadState('fm_orders', initialOrders))
+  const [offers, setOffers] = useState(() => loadState('fm_offers', DEMO_OFFERS))
+  const [commissions, setCommissions] = useState(() => loadState('fm_commissions', []))
   const [service, setService] = useState(null)
   const [toast, setToast] = useState(null)
+
+  // Guardar en localStorage cuando cambian
+  useEffect(() => { saveState('fm_orders', orders) }, [orders])
+  useEffect(() => { saveState('fm_offers', offers) }, [offers])
+  useEffect(() => { saveState('fm_commissions', commissions) }, [commissions])
+  useEffect(() => { saveState('fm_users', users) }, [users])
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000) }
   function loginAs(u) { setUser(u); setScreen(u.type === 'client' ? 'services' : 'workshop-dash') }
@@ -657,8 +695,13 @@ export default function Home() {
     setUsers(prev => [...prev, u]); loginAs(u); showToast('¡Taller registrado!')
   }
 
-  function publishOrder(draft, svc) {
-    const ord = { id: `ord-${Date.now()}`, clientId: user.id, clientName: user.name, service: svc, summary: draft, status: 'open', createdAt: new Date().toISOString() }
+  function publishOrder(draft, svc, images) {
+    const ord = {
+      id: `ord-${Date.now()}`, clientId: user.id, clientName: user.name,
+      service: svc, summary: draft, status: 'open',
+      images: images || [],
+      createdAt: new Date().toISOString()
+    }
     setOrders(prev => [...prev, ord]); setScreen('my-orders'); showToast('¡Pedido publicado!')
   }
 
